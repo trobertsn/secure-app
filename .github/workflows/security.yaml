@@ -1,12 +1,10 @@
-# security.yaml - Phase 1 DevSecOps pipeline: shift-left scanning
-# Three scanners run on every push: secrets, code (SAST), and dependencies/image
+# security.yaml — Phase 1 DevSecOps pipeline: shift-left scanning
+# Three scanners run on every push: secrets, code (SAST), dependencies/image
 name: Security Scan
-
 on:
   push:
     branches:
       - main
-
 jobs:
   # ---- SCANNER 1: Gitleaks (catches committed secrets) ----
   secret-scan:
@@ -15,33 +13,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0      # full history so getleaks can scan all commits
+          fetch-depth: 0
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # scan the whole repo history, not just the latest diff
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
-  # ---- SCANNER 2: Semgrep (SAST - finds vulnerable code patterns) ----
+  # ---- SCANNER 2: Semgrep (SAST) — current container approach, not the deprecated action ----
   sast-scan:
     runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Run Semgrep
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: p/default       # Semgrep's default ruleset
+        run: semgrep scan --config p/default --error
 
-  # ---- SCANNER 3: Trivy (scans dependencies + built image for CVEs) ----
+  # ---- SCANNER 3: Trivy — scan the built image so it sees installed packages ----
   vuln-scan:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Run Trivy fliesystem scan
+      - name: Build the image
+        run: docker build -t secure-app:test .
+      - name: Run Trivy image scan
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: fs        # scan the filesystem (requirements.txt etc.)
-          scan-ref: .
-          severity: HIGH,CRITICAL # only report the serious ones
-          format: table       
+          scan-type: image
+          image-ref: secure-app:test
+          severity: HIGH,CRITICAL
+          exit-code: "1"        # FAIL the job if HIGH/CRITICAL vulns are found
+          format: table
