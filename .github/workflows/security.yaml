@@ -1,0 +1,47 @@
+# security.yaml - Phase 1 DevSecOps pipeline: shift-left scanning
+# Three scanners run on every push: secrets, code (SAST), and dependencies/image
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # ---- SCANNER 1: Gitleaks (catches committed secrets) ----
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # full history so getleaks can scan all commits
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   
+
+  # ---- SCANNER 2: Semgrep (SAST - finds vulnerable code patterns) ----
+  sast-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run Semgrep
+        uses: sengrep/semgrep-action@v1
+        with:
+          config: p/default       # Semgrep's default ruleset
+
+  # ---- SCANNER 3: Trivy (scans dependencies + built image for CVEs) ----
+  vuln-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Run Trivy fliesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs        # scan the filesystem (requirements.txt etc.)
+          scan-ref: .
+          severity: HIGH,CRITICAL # only report the serious ones
+          format: table       
