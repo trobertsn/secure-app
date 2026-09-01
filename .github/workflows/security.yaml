@@ -6,7 +6,7 @@ on:
     branches:
       - main
 jobs:
-  # ---- SCANNER 1: Gitleaks (catches committed secrets) ----
+  # ---- SCANNER 1: Gitleaks (call the CLI directly — current best practice) ----
   secret-scan:
     runs-on: ubuntu-latest
     steps:
@@ -15,11 +15,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # scan the whole repo history, not just the latest diff
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+        # run the gitleaks binary directly in its container; scan the full repo
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" \
+            zricethezav/gitleaks:latest \
+            detect --source /repo --verbose --redact
 
   # ---- SCANNER 2: Semgrep (SAST) — current container approach, not the deprecated action ----
   sast-scan:
